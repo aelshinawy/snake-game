@@ -1,37 +1,75 @@
+/**
+ * Game Variables
+ */
 const CELL_SIZE = 16;
 const CANVAS_WIDTH = CELL_SIZE * 24;
 const CANVAS_HEIGHT = CELL_SIZE * 24;
-const CANVAS_BACKGROUND_COLOUR = "#131313";
-const DIFFICULTY_MULTIPLIER = 0.09;
-const INITIAL_GAME_SPEED_MS = 320;
+const CANVAS_BACKGROUND_COLOUR = "#232323";
+const DIFFICULTY_MULTIPLIER = 0.085;
+const INITIAL_GAME_SPEED_MS = 310;
 const INITIAL_SNAKE_LENGTH = 5;
 const SNAKE_COLOUR = "#f6ca9f";
 const SNAKE_HEAD_COLOR = "#f9e6cf";
-const FOOD_COLOUR = "#5ac54f";
+const FOOD_COLOUR = "#99e65f";
 
+/**
+ * Utility Functions
+ */
+const half = (value) => value / 2;
+const mod = (a, b) => a % b;
+const divide = (a, b) => a / b;
+const getVector = (x, y) => ({ x, y });
+
+/**
+ * Canvas Setup
+ */
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 
 canvas.width = CANVAS_WIDTH;
 canvas.height = CANVAS_HEIGHT;
 
-const canvasCenterX = Math.floor(canvas.width / CELL_SIZE / 2) * CELL_SIZE;
-const canvasCenterY = Math.floor(canvas.height / CELL_SIZE / 2) * CELL_SIZE;
+const canvasCenterX = Math.floor(half(canvas.width / CELL_SIZE)) * CELL_SIZE;
+const canvasCenterY = Math.floor(half(canvas.height / CELL_SIZE)) * CELL_SIZE;
 
+/**
+ * Game Logic
+ */
+
+const GameStates = Object.freeze({
+  READY: Symbol("ready"),
+  PLAYING: Symbol("playing"),
+  LOSE: Symbol("lose"),
+});
+
+let gameTickCount = 0;
+let gameState = GameStates.READY;
 let score = 0;
 let current_difficulty = 0;
 
-let dx = CELL_SIZE;
-let dy = 0;
-
+let speed = getVector(CELL_SIZE, 0);
 let isHandlingInput = false;
 
-let snake = Array.from({ length: INITIAL_SNAKE_LENGTH }, (_, i) => ({
-  x: canvasCenterX - i * CELL_SIZE,
-  y: canvasCenterY,
-}));
+let snake = Array.from({ length: INITIAL_SNAKE_LENGTH }, (_, i) =>
+  getVector(canvasCenterX - i * CELL_SIZE, canvasCenterY)
+);
 
-let foodPosition;
+let food;
+
+function resetGame() {
+  gameTickCount = 0;
+  gameState = GameStates.READY;
+  score = 0;
+  current_difficulty = 0;
+
+  speed = getVector(CELL_SIZE, 0);
+  isHandlingInput = false;
+
+  snake = Array.from({ length: INITIAL_SNAKE_LENGTH }, (_, i) =>
+    getVector(canvasCenterX - i * CELL_SIZE, canvasCenterY)
+  );
+  spawnFood();
+}
 
 function clearCanvas() {
   ctx.fillStyle = CANVAS_BACKGROUND_COLOUR;
@@ -43,16 +81,10 @@ function drawCanvasBackground() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-function drawCheckeredOverlay() {
-  const colorA = "#ffffff05";
-  const colorB = "transparent";
-  const rows = canvas.height / CELL_SIZE;
-  const cols = canvas.width / CELL_SIZE;
-
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const color = (row + col) % 2 === 0 ? colorA : colorB;
-      ctx.fillStyle = color;
+function drawCheckeredOverlay(colorA = "#ffffff09", colorB = "transparent") {
+  for (let row = 0; row < divide(canvas.height, CELL_SIZE); row++) {
+    for (let col = 0; col < divide(canvas.width, CELL_SIZE); col++) {
+      ctx.fillStyle = mod(row + col, 2) === 0 ? colorA : colorB;
       ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     }
   }
@@ -68,9 +100,9 @@ function drawCircle(x, y, radius, color) {
 
 function drawFood() {
   drawCircle(
-    foodPosition.x + CELL_SIZE / 2,
-    foodPosition.y + CELL_SIZE / 2,
-    CELL_SIZE / 2.5,
+    food.x + half(CELL_SIZE),
+    food.y + half(CELL_SIZE),
+    divide(CELL_SIZE, 2.5),
     FOOD_COLOUR
   );
 }
@@ -80,11 +112,13 @@ function increaseDifficulty() {
 }
 
 function processGameState() {
-  const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+  if (isGameOver()) {
+    gameState = GameStates.LOSE;
+    return;
+  }
+  const head = { x: snake[0].x + speed.x, y: snake[0].y + speed.y };
 
-  const didEatFood = head.x === foodPosition.x && head.y === foodPosition.y;
-
-  if (didEatFood) {
+  if (isColliding(head, food)) {
     score += 1;
     document.getElementById("score").innerHTML = score;
     increaseDifficulty();
@@ -113,15 +147,19 @@ function getRandomCell(max) {
   return Math.floor(Math.random() * max);
 }
 
+function isColliding(posA, posB) {
+  if (!posA || !posB) return false;
+  return posA.x === posB.x && posA.y === posB.y;
+}
+
 function spawnFood() {
-  foodPosition = {
-    x: getRandomCell(CANVAS_WIDTH / CELL_SIZE) * CELL_SIZE,
-    y: getRandomCell(CANVAS_HEIGHT / CELL_SIZE) * CELL_SIZE,
+  food = {
+    x: getRandomCell(divide(CANVAS_WIDTH, CELL_SIZE)) * CELL_SIZE,
+    y: getRandomCell(divide(CANVAS_HEIGHT, CELL_SIZE)) * CELL_SIZE,
   };
 
-  snake.forEach(function isFoodOnSnake(part) {
-    const foodIsoNsnake = part.x == foodPosition.x && part.y == foodPosition.y;
-    if (foodIsoNsnake) spawnFood();
+  snake.forEach((part) => {
+    if (isColliding(part, food)) spawnFood();
   });
 }
 
@@ -130,10 +168,12 @@ function drawSnake() {
 }
 
 function drawSnakePart(snakePart, i) {
-  ctx.fillStyle = SNAKE_COLOUR;
-  if (i === 0) {
-    ctx.fillStyle = SNAKE_HEAD_COLOR;
-  }
+  ctx.fillStyle =
+    gameState === GameStates.LOSE &&
+    mod(gameTickCount, Math.floor(current_difficulty) + 2) === 0
+      ? "#f5555d"
+      : SNAKE_COLOUR;
+  if (i === 0) ctx.fillStyle = SNAKE_HEAD_COLOR;
   ctx.fillRect(snakePart.x, snakePart.y, CELL_SIZE, CELL_SIZE);
 }
 
@@ -148,44 +188,98 @@ function handleInput(event) {
 
   const keyPressed = event.code;
 
-  const isMovingUp = dy === -CELL_SIZE;
-  const isMovingDown = dy === CELL_SIZE;
-  const isMovingRight = dx === CELL_SIZE;
-  const isMovingLeft = dx === -CELL_SIZE;
+  const isMovingUp = speed.y === -CELL_SIZE;
+  const isMovingDown = speed.y === CELL_SIZE;
+  const isMovingRight = speed.x === CELL_SIZE;
+  const isMovingLeft = speed.x === -CELL_SIZE;
+
+  if (keyPressed && gameState === GameStates.READY) {
+    gameState = GameStates.PLAYING;
+  }
+
+  if (keyPressed && gameState === GameStates.LOSE) {
+    resetGame();
+    gameState = GameStates.READY;
+  }
 
   if (LEFT_KEY.includes(keyPressed) && !isMovingRight) {
-    dx = -CELL_SIZE;
-    dy = 0;
+    speed = getVector(-CELL_SIZE, 0);
   }
   if (UP_KEY.includes(keyPressed) && !isMovingDown) {
-    dx = 0;
-    dy = -CELL_SIZE;
+    speed = getVector(0, -CELL_SIZE);
   }
   if (RIGHT_KEY.includes(keyPressed) && !isMovingLeft) {
-    dx = CELL_SIZE;
-    dy = 0;
+    speed = getVector(CELL_SIZE, 0);
   }
   if (DOWN_KEY.includes(keyPressed) && !isMovingUp) {
-    dx = 0;
-    dy = CELL_SIZE;
+    speed = getVector(0, CELL_SIZE);
   }
 }
 
-function gameTick() {
-  if (isGameOver()) return;
+function drawWelcomeScreen() {
+  ctx.fillStyle = "#bf6f4a55";
+  ctx.fillRect(0, 32, canvas.width, 80);
+  ctx.font = "48px 'Inter', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = SNAKE_HEAD_COLOR;
+  ctx.fillText("SNAKE", canvasCenterX, canvasCenterY - 110);
+  ctx.fillStyle = SNAKE_COLOUR;
+  ctx.font = "14px 'Inter', sans-serif";
+  ctx.fillText("by Ahmed El-Shinawy", canvasCenterX, canvasCenterY - 90);
 
+  if (mod(gameTickCount, 3) !== 0) {
+    ctx.fillText("Press any key to PLAY", canvasCenterX, canvasCenterY + 130);
+  }
+
+  ctx.font = "16px 'Inter', sans-serif";
+  ctx.fillStyle = "#99e65f";
+  ctx.fillText("Arrow Keys or WASD to Move", canvasCenterX, canvasCenterY + 90);
+}
+
+function drawLoseScreen() {
+  ctx.fillStyle = "#891e2b";
+  ctx.fillRect(0, canvasCenterY - 30, canvas.width, 60);
+  ctx.font = "48px 'Inter', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = SNAKE_HEAD_COLOR;
+  ctx.fillText("GAME OVER!", canvasCenterX, canvasCenterY + 16);
+
+  ctx.font = "14px 'Inter', sans-serif";
+  ctx.fillText("Press any key to Try Again", canvasCenterX, canvasCenterY + 50);
+}
+
+function gameTick() {
+  gameTickCount++;
   clearCanvas();
   drawCanvasBackground();
   drawCheckeredOverlay();
-  processGameState();
-  drawFood();
-  drawSnake();
+
+  switch (gameState) {
+    case GameStates.READY:
+      drawSnake();
+      drawWelcomeScreen();
+      break;
+    case GameStates.PLAYING:
+      processGameState();
+      drawFood();
+      drawSnake();
+      break;
+    case GameStates.LOSE:
+      drawSnake();
+      drawLoseScreen();
+      break;
+  }
 
   main();
 }
 
 function main() {
-  setTimeout(gameTick, (1 / (1 + current_difficulty)) * INITIAL_GAME_SPEED_MS);
+  setTimeout(
+    gameTick,
+    divide(1, 1 + current_difficulty) * INITIAL_GAME_SPEED_MS
+  );
 }
 
 main();
