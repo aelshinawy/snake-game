@@ -183,6 +183,15 @@ function handleInput(event) {
   const UP_KEY = ["ArrowUp", "KeyW"];
   const DOWN_KEY = ["ArrowDown", "KeyS"];
 
+  if (keyPressed && gameState === GameStates.READY) {
+    gameState = GameStates.PLAYING;
+  }
+
+  if (keyPressed && gameState === GameStates.LOSE) {
+    resetGame();
+    gameState = GameStates.READY;
+  }
+
   if (isHandlingInput) return;
   isHandlingInput = true;
 
@@ -192,15 +201,6 @@ function handleInput(event) {
   const isMovingDown = speed.y === CELL_SIZE;
   const isMovingRight = speed.x === CELL_SIZE;
   const isMovingLeft = speed.x === -CELL_SIZE;
-
-  if (keyPressed && gameState === GameStates.READY) {
-    gameState = GameStates.PLAYING;
-  }
-
-  if (keyPressed && gameState === GameStates.LOSE) {
-    resetGame();
-    gameState = GameStates.READY;
-  }
 
   if (LEFT_KEY.includes(keyPressed) && !isMovingRight) {
     speed = getVector(-CELL_SIZE, 0);
