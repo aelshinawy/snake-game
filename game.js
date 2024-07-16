@@ -183,6 +183,8 @@ function handleInput(event) {
   const UP_KEY = ["ArrowUp", "KeyW"];
   const DOWN_KEY = ["ArrowDown", "KeyS"];
 
+  const keyPressed = event.code;
+
   if (keyPressed && gameState === GameStates.READY) {
     gameState = GameStates.PLAYING;
   }
@@ -194,8 +196,6 @@ function handleInput(event) {
 
   if (isHandlingInput) return;
   isHandlingInput = true;
-
-  const keyPressed = event.code;
 
   const isMovingUp = speed.y === -CELL_SIZE;
   const isMovingDown = speed.y === CELL_SIZE;
